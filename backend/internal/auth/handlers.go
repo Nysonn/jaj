@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"log"
 	"net/http"
 	"time"
 
@@ -68,9 +69,16 @@ func MakeSignupHandler(db *sql.DB, mailer *email.Client, jwtSecret string) http.
 			return
 		}
 
-		// Send verification email asynchronously
+		// Send verification email asynchronously and log errors incase it fails
 		go func() {
-			mailer.SendMail(req.Email, "Email Verification", "Please verify your email with token: "+verifyToken)
+			subject := "JAJ Email Verification"
+			body := "Please verify your email with token: " + verifyToken
+
+			if err := mailer.SendMail(req.Email, subject, body); err != nil {
+
+				//Log incase anything goes wrong here
+				log.Printf("ERROR sending signup verification to %s: %v", req.Email, err)
+			}
 		}()
 
 		w.WriteHeader(http.StatusCreated)
@@ -178,7 +186,15 @@ func MakePasswordResetHandler(db *sql.DB, mailer *email.Client, jwtSecret string
 				http.Error(w, "failed to set reset token", http.StatusInternalServerError)
 				return
 			}
-			go mailer.SendMail(email, "Password Reset", "Your password reset token is: "+resetToken)
+			go func() {
+				subject := "Password Reset"
+				body := "Your password reset token is: " + resetToken
+
+				if err := mailer.SendMail(email, subject, body); err != nil {
+					log.Printf("ERROR sending password reset to %s: %v", email, err)
+				}
+			}()
+
 			w.WriteHeader(http.StatusOK)
 			json.NewEncoder(w).Encode(Response{Message: "Password reset email sent."})
 		case http.MethodPut:

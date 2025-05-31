@@ -5,35 +5,35 @@ import (
 	"fmt"
 	"net"
 	"net/smtp"
+	"strings"
 )
 
 // Client holds SMTP server details.
 type Client struct {
-	Host     string // e.g. "smtp.example.com:587"
+	Host     string // e.g. "smtp.gmail.com:465"
 	Username string
 	Password string
 }
 
-// NewClient constructs a new SMTP client.
 func NewClient(host, user, pass string) *Client {
 	return &Client{Host: host, Username: user, Password: pass}
 }
 
-// SendMail sends a plain-text email to the specified recipient.
+// SendMail sends a plain-text email using implicit TLS (port 465).
 func (c *Client) SendMail(toEmail, subject, body string) error {
-	// Build email headers + body
+	// Build raw message
 	msg := fmt.Sprintf(
 		"From: %s\r\nTo: %s\r\nSubject: %s\r\n\r\n%s",
 		c.Username, toEmail, subject, body,
 	)
 
-	// Split host and port for TLS config
+	// Extract host for TLS config (host: "smtp.gmail.com", port: "465")
 	host, _, err := net.SplitHostPort(c.Host)
 	if err != nil {
 		return fmt.Errorf("invalid SMTP host:port: %w", err)
 	}
 
-	// Establish TLS connection
+	// 1. Implicit TLS dial (port 465)
 	tlsConfig := &tls.Config{ServerName: host}
 	conn, err := tls.Dial("tcp", c.Host, tlsConfig)
 	if err != nil {
@@ -41,41 +41,50 @@ func (c *Client) SendMail(toEmail, subject, body string) error {
 	}
 	defer conn.Close()
 
-	// Create new SMTP client over that connection
-	smtpClient, err := smtp.NewClient(conn, host)
+	// 2. Create new SMTP client over that TLS connection
+	client, err := smtp.NewClient(conn, host)
 	if err != nil {
 		return fmt.Errorf("smtp.NewClient: %w", err)
 	}
-	defer smtpClient.Close()
+	defer client.Close()
 
-	// Authenticate
+	// 3. Authenticate
 	auth := smtp.PlainAuth("", c.Username, c.Password, host)
-	if err := smtpClient.Auth(auth); err != nil {
+	if err := client.Auth(auth); err != nil {
 		return fmt.Errorf("smtp.Auth: %w", err)
 	}
 
-	// Set the sender and recipient
-	if err := smtpClient.Mail(c.Username); err != nil {
-		return fmt.Errorf("Mail from error: %w", err)
-	}
-	if err := smtpClient.Rcpt(toEmail); err != nil {
-		return fmt.Errorf("Rcpt to error: %w", err)
+	// 4. MAIL FROM
+	if err := client.Mail(c.Username); err != nil {
+		return fmt.Errorf("mail from error: %w", err)
 	}
 
-	// Write the message body
-	wc, err := smtpClient.Data()
+	// 5. RCPT TO
+	if err := client.Rcpt(toEmail); err != nil {
+		return fmt.Errorf("rcpt to error: %w", err)
+	}
+
+	// 6. DATA
+	wc, err := client.Data()
 	if err != nil {
-		return fmt.Errorf("Data error: %w", err)
+		return fmt.Errorf("data error: %w", err)
 	}
 	defer wc.Close()
 
 	if _, err := wc.Write([]byte(msg)); err != nil {
-		return fmt.Errorf("Write error: %w", err)
+		return fmt.Errorf("write error: %w", err)
 	}
 
-	// Close & send
-	if err := smtpClient.Quit(); err != nil {
-		return fmt.Errorf("Quit error: %w", err)
+	// 7. QUIT
+	err = client.Quit()
+	if err != nil {
+		// Gmail (and some servers) send "250 2.0.0 OK" on QUIT instead of 221.
+		// We treat any 250 starting with "250 " as not-an-error.
+		if strings.HasPrefix(err.Error(), "250 ") {
+			// Ignore the 250 OK on QUIT
+			return nil
+		}
+		return fmt.Errorf("quit error: %w", err)
 	}
 	return nil
 }
