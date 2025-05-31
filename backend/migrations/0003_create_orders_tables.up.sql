@@ -1,0 +1,16 @@
+CREATE TABLE IF NOT EXISTS orders (
+  id SERIAL PRIMARY KEY,
+  user_id INT NOT NULL REFERENCES users(id),
+  status TEXT NOT NULL,        -- PENDING, CONFIRMED, CANCELLED, FULFILLED
+  transport_fee INT NOT NULL,
+  total_cost INT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS order_items (
+  id SERIAL PRIMARY KEY,
+  order_id INT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+  item_id INT NOT NULL REFERENCES items(id),
+  quantity INT NOT NULL,
+  unit_price INT NOT NULL
+);
