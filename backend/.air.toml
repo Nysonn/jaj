@@ -1,0 +1,21 @@
+# .air.toml
+
+# Which files/folders to watch; by default it watches *.go
+root = "."
+tmp_dir = "tmp"    # where to build temporary binaries
+
+# Directories to ignore (optional)
+[ignore]
+  dirs = ["vendor", "tmp", "node_modules"]  # ignore node_modules if you have frontend code
+
+# How to build and run your server
+[build]
+  cmd = "go build -o tmp/jaj-server ./cmd/jaj-server"
+  bin = "tmp/jaj-server"
+  include_ext = ["go", "tpl", "tmpl", "html"]  # file extensions to watch
+  exclude_dir = ["assets", "tmp", "vendor"]
+  delay = 1000       # debounce in milliseconds to wait before rebuilding
+
+# Command to run after a successful build
+[run]
+  cmd = "tmp/jaj-server"

@@ -4,9 +4,11 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"html/template"
 	"net/http"
 	"strconv"
 	"strings"
+	texttemplate "text/template"
 	"time"
 
 	"server/internal/auth"
@@ -33,6 +35,22 @@ type OrderItemResponse struct {
 	Subtotal  int    `json:"subtotal"`
 }
 
+// New struct for order confirmation data:
+type OrderConfirmationData struct {
+	Username string
+	OrderID  int
+	Items    []struct {
+		Name      string
+		Quantity  int
+		UnitPrice int
+		Subtotal  int
+	}
+	TransportFee  int
+	TotalCost     int
+	PickupTime    string
+	PickupStation string
+}
+
 // OrderResponse represents the order details sent back to the client.
 type OrderResponse struct {
 	OrderID       int                 `json:"orderId"`
@@ -44,6 +62,16 @@ type OrderResponse struct {
 	PickupTime    string              `json:"pickupTime"`
 	PickupStation string              `json:"pickupStation"`
 }
+
+// Global template variables:
+var (
+	verifyHTMLTmpl       *template.Template
+	verifyTextTmpl       *texttemplate.Template
+	resetHTMLTmpl        *template.Template
+	resetTextTmpl        *texttemplate.Template
+	orderConfirmHTMLTmpl *template.Template
+	orderConfirmTextTmpl *texttemplate.Template
+)
 
 // MakeOrdersHandler now accepts mailer but will not pass orders package types into email.
 func MakeOrdersHandler(
@@ -185,40 +213,50 @@ func handleCreateOrder(
 		return
 	}
 
-	// 7. Send confirmation email asynchronously (build the body here)
+	// 7. Send confirmation email asynchronously using the template helper
+	// (a) Lookup user's email and username
 	go func() {
-		// Lookup user email
-		var userEmail string
-		if err := db.QueryRowContext(ctx,
-			`SELECT email FROM users WHERE id=$1`, userID,
-		).Scan(&userEmail); err != nil {
-			logger.Error("failed to lookup user email", zap.Error(err))
+		var userEmail, username string
+		const qUser = `SELECT email, username FROM users WHERE id=$1`
+		if err := db.QueryRowContext(ctx, qUser, userID).Scan(&userEmail, &username); err != nil {
+			logger.Error("failed to lookup user email/username", zap.Error(err))
 			return
 		}
 
-		// Build email subject + body
-		subject := fmt.Sprintf("Your JAJ Order #%d Confirmation", orderID)
-		var lines []string
-		lines = append(lines, fmt.Sprintf("Thank you for your order!"))
-		lines = append(lines, fmt.Sprintf("Order ID: %d", orderID))
-		lines = append(lines, "")
-		lines = append(lines, "Items:")
-		for _, it := range itemsResponse {
-			lines = append(
-				lines,
-				fmt.Sprintf("%s x%d @ UGX %d = UGX %d",
-					it.Name, it.Quantity, it.UnitPrice, it.Subtotal,
-				),
-			)
-		}
-		lines = append(lines, "")
-		lines = append(lines, fmt.Sprintf("Transport Fee: UGX %d", transportFee))
-		lines = append(lines, fmt.Sprintf("Total Cost: UGX %d", totalCost))
-		lines = append(lines, "")
-		lines = append(lines, "Pickup at 18:00, F2 17")
+		// (b) Build the data for the template - Fix the struct field assignment
+		tmplItems := make([]struct {
+			Name      string
+			Quantity  int
+			UnitPrice int
+			Subtotal  int
+		}, len(itemsResponse))
 
-		body := strings.Join(lines, "\n")
-		if err := mailer.SendMail(userEmail, subject, body); err != nil {
+		for i, it := range itemsResponse {
+			tmplItems[i] = struct {
+				Name      string
+				Quantity  int
+				UnitPrice int
+				Subtotal  int
+			}{
+				Name:      it.Name,
+				Quantity:  it.Quantity,
+				UnitPrice: it.UnitPrice,
+				Subtotal:  it.Subtotal,
+			}
+		}
+
+		data := email.OrderConfirmationData{
+			Username:      username,
+			OrderID:       orderID,
+			Items:         tmplItems,
+			TransportFee:  transportFee,
+			TotalCost:     totalCost,
+			PickupTime:    "18:00",
+			PickupStation: "F2 17",
+		}
+
+		// (c) Send the templated email
+		if err := mailer.SendOrderConfirmationEmail(userEmail, data); err != nil {
 			logger.Error("failed to send order confirmation email", zap.Error(err))
 		}
 	}()
@@ -423,24 +461,23 @@ func handleCancelOrder(w http.ResponseWriter, r *http.Request, db *sql.DB, logge
 		return
 	}
 
-	// Send cancellation email asynchronously
 	go func() {
-		// Lookup user email
-		var userEmail string
-		if err := db.QueryRowContext(ctx,
-			`SELECT email FROM users WHERE id=$1`, userID,
-		).Scan(&userEmail); err != nil {
-			logger.Error("failed to lookup user email", zap.Error(err))
+		// (a) Lookup user’s email and username
+		var userEmail, username string
+		const qUser = `SELECT email, username FROM users WHERE id=$1`
+		if err := db.QueryRowContext(ctx, qUser, userID).Scan(&userEmail, &username); err != nil {
+			logger.Error("failed to lookup user email/username", zap.Error(err))
 			return
 		}
 
-		// Build subject & body
-		subject := fmt.Sprintf("Your JAJ Order #%d Cancellation", orderID)
-		body := fmt.Sprintf(
-			"Your order #%d has been cancelled. If you have any questions, contact support.",
-			orderID,
-		)
-		if err := mailer.SendMail(userEmail, subject, body); err != nil {
+		// (b) Build the data for the template
+		data := email.OrderCancellationData{
+			Username: username,
+			OrderID:  orderID,
+		}
+
+		// (c) Send the templated cancellation email
+		if err := mailer.SendOrderCancellationEmail(userEmail, data); err != nil {
 			logger.Error("failed to send cancellation email", zap.Error(err))
 		}
 	}()

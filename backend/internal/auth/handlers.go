@@ -17,6 +17,7 @@ import (
 
 // SignupRequest holds data for user sign-up.
 type SignupRequest struct {
+	Username string `json:"username"`
 	Email    string `json:"email"`
 	Password string `json:"password"`
 }
@@ -47,6 +48,16 @@ func MakeSignupHandler(db *sql.DB, mailer *email.Client, jwtSecret string) http.
 		}
 		defer r.Body.Close()
 
+		// Validating username to have characters more than 3 and not more than 32/ username field should also not be empty
+		if req.Username == "" {
+			http.Error(w, "username is required", http.StatusBadRequest)
+			return
+		}
+		if len(req.Username) < 3 || len(req.Username) > 32 {
+			http.Error(w, "username must be between 3 to 32 characters", http.StatusBadRequest)
+			return
+		}
+
 		// Hash password
 		hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 		if err != nil {
@@ -63,20 +74,15 @@ func MakeSignupHandler(db *sql.DB, mailer *email.Client, jwtSecret string) http.
 		verifyToken := hex.EncodeToString(tokenBytes)
 
 		// Insert user
-		const q = `INSERT INTO users (email, password_hash, verification_token) VALUES ($1, $2, $3)`
-		if _, err := db.ExecContext(r.Context(), q, req.Email, string(hash), verifyToken); err != nil {
-			http.Error(w, "email already registered", http.StatusConflict)
+		const q = `INSERT INTO users (username, email, password_hash, verification_token) VALUES ($1, $2, $3, $4)`
+		if _, err := db.ExecContext(r.Context(), q, req.Username, req.Email, string(hash), verifyToken); err != nil {
+			http.Error(w, "user already registered", http.StatusConflict)
 			return
 		}
 
 		// Send verification email asynchronously and log errors incase it fails
 		go func() {
-			subject := "JAJ Email Verification"
-			body := "Please verify your email with token: " + verifyToken
-
-			if err := mailer.SendMail(req.Email, subject, body); err != nil {
-
-				//Log incase anything goes wrong here
+			if err := mailer.SendVerificationEmail(req.Email, req.Username, verifyToken); err != nil {
 				log.Printf("ERROR sending signup verification to %s: %v", req.Email, err)
 			}
 		}()
@@ -172,33 +178,45 @@ func MakePasswordResetHandler(db *sql.DB, mailer *email.Client, jwtSecret string
 		switch r.Method {
 		case http.MethodPost:
 			// generate reset token
-			email := r.URL.Query().Get("email")
-			if email == "" {
+			emailAddr := r.URL.Query().Get("email")
+			if emailAddr == "" {
 				http.Error(w, "email is required", http.StatusBadRequest)
 				return
 			}
+			// 1. Generate token & expiry
 			tokenBytes := make([]byte, 16)
 			rand.Read(tokenBytes)
 			resetToken := hex.EncodeToString(tokenBytes)
 			expires := time.Now().Add(time.Hour)
+
+			// 2. Update users.reset_token & reset_expires
 			const q1 = `UPDATE users SET reset_token=$1, reset_expires=$2 WHERE email=$3`
-			if _, err := db.ExecContext(r.Context(), q1, resetToken, expires, email); err != nil {
+			if _, err := db.ExecContext(r.Context(), q1, resetToken, expires, emailAddr); err != nil {
 				http.Error(w, "failed to set reset token", http.StatusInternalServerError)
 				return
 			}
-			go func() {
-				subject := "Password Reset"
-				body := "Your password reset token is: " + resetToken
 
-				if err := mailer.SendMail(email, subject, body); err != nil {
-					log.Printf("ERROR sending password reset to %s: %v", email, err)
+			// 3. Lookup username for this email
+			var username string
+			const qUser = `SELECT username FROM users WHERE email=$1`
+			if err := db.QueryRowContext(r.Context(), qUser, emailAddr).Scan(&username); err != nil {
+				// If for some reason user row disappeared, just log and continue with email address in greeting
+				log.Printf("WARN: could not find username for %s: %v", emailAddr, err)
+				username = ""
+			}
+
+			// 4. Send password reset email with templates
+			go func() {
+				if err := mailer.SendResetPasswordEmail(emailAddr, username, resetToken); err != nil {
+					log.Printf("ERROR sending password reset to %s: %v", emailAddr, err)
 				}
 			}()
 
 			w.WriteHeader(http.StatusOK)
 			json.NewEncoder(w).Encode(Response{Message: "Password reset email sent."})
+
 		case http.MethodPut:
-			// reset password
+			// (no changes here, this only handles the token→password step)
 			var req struct {
 				Token       string `json:"token"`
 				NewPassword string `json:"newPassword"`
@@ -226,6 +244,7 @@ func MakePasswordResetHandler(db *sql.DB, mailer *email.Client, jwtSecret string
 			}
 			w.WriteHeader(http.StatusOK)
 			json.NewEncoder(w).Encode(Response{Message: "Password reset successful."})
+
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}

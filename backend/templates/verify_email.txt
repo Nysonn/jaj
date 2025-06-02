@@ -1,0 +1,11 @@
+Hi {{ .Username }},
+
+Welcome to JAJ! To finish creating your account, please copy and paste the following link into your browser:
+{{ .VerifyURL }}
+
+This link will expire in 24 hours. If you didn’t sign up for JAJ, just ignore this email.
+
+Thanks,
+The JAJ Team
+JAJ • Helping students order groceries and daily necessities
+© 2025 JAJ. All rights reserved.

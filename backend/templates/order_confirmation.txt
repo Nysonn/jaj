@@ -1,0 +1,19 @@
+Hi {{ .Username }},
+
+Thank you for your order! Here are the details of your recent purchase:
+
+{{ range .Items -}}
+- {{ .Name }} x{{ .Quantity }} @ UGX {{ .UnitPrice }} = UGX {{ .Subtotal }}
+{{ end }}
+
+Transport Fee: UGX {{ .TransportFee }}
+Total Cost:     UGX {{ .TotalCost }}
+Pickup Time:    {{ .PickupTime }}
+Pickup Location: {{ .PickupStation }}
+
+Your Order ID is #{{ .OrderID }}. We’ll see you at the pickup station at the scheduled time.
+
+Thanks for choosing JAJ!
+The JAJ Team
+JAJ • Helping students order groceries and daily necessities
+© 2025 JAJ
