@@ -91,11 +91,17 @@ func main() {
 	mux.Handle("/login", auth.MakeLoginHandler(sqlDB, cfg.JWTSecret))
 	mux.Handle("/password-reset", auth.MakePasswordResetHandler(sqlDB, mailer, cfg.JWTSecret))
 
-	// Chat endpoint (requires JWT)
+	// Get base URL from environment or use default
+	baseURL := os.Getenv("BASE_URL")
+	if baseURL == "" {
+		baseURL = "http://localhost:8080" // default for development
+	}
+
+	// Chat endpoint (requires JWT) - FIXED: Added missing mailer and baseURL parameters
 	mux.Handle(
 		"/chat/prompt",
 		auth.RequireJWT(cfg.JWTSecret)(
-			chat.MakePromptHandler(sqlDB, logger, registry, genaiClient),
+			chat.MakePromptHandler(sqlDB, logger, registry, genaiClient, mailer, baseURL),
 		),
 	)
 
