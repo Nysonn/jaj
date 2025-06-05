@@ -10,9 +10,10 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"github.com/google/generative-ai-go/genai"
 	"github.com/joho/godotenv"
 	"go.uber.org/zap"
-	"google.golang.org/genai"
+	"google.golang.org/api/option"
 
 	"server/internal/admin"
 	"server/internal/auth"
@@ -43,14 +44,12 @@ func main() {
 		log.Fatal("GEMINI_API_KEY must be set in environment")
 	}
 
-	// 4. Initialize the GenAI client
-	genaiClient, err := genai.NewClient(ctx, &genai.ClientConfig{
-		APIKey:  apiKey,
-		Backend: genai.BackendGeminiAPI,
-	})
+	// 4. Initialize the GenAI client with the correct API
+	genaiClient, err := genai.NewClient(ctx, option.WithAPIKey(apiKey))
 	if err != nil {
 		log.Fatalf("failed to initialize Gemini SDK: %v", err)
 	}
+	defer genaiClient.Close()
 
 	// 5. Initialize logger & metrics
 	logger := monitoring.NewLogger()
