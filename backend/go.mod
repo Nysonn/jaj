@@ -404,6 +404,7 @@ require (
 	github.com/rogpeppe/fastuuid v1.2.0 // indirect
 	github.com/rogpeppe/go-internal v1.13.1 // indirect
 	github.com/rqlite/gorqlite v0.0.0-20230708021416-2acd02b70b79 // indirect
+	github.com/rs/cors v1.11.1
 	github.com/rs/xid v1.2.1 // indirect
 	github.com/rs/zerolog v1.15.0 // indirect
 	github.com/russross/blackfriday v1.6.0 // indirect

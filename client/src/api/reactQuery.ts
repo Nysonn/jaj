@@ -35,6 +35,7 @@ export function usePost<TRequest, TResponse>(
   return useMutation<TResponse, Error, TRequest>({
     mutationFn: async (body: TRequest) => {
       const { data } = await axiosClient.post<TResponse>(url, body);
+      console.log(key)
       return data;
     },
     onError: (err: Error) => {

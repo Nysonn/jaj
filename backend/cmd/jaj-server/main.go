@@ -12,6 +12,7 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/google/generative-ai-go/genai"
 	"github.com/joho/godotenv"
+	"github.com/rs/cors"
 	"go.uber.org/zap"
 	"google.golang.org/api/option"
 
@@ -26,7 +27,7 @@ import (
 )
 
 func main() {
-	//Automatically load the environment variables
+	// Automatically load the environment variables
 	_ = godotenv.Load()
 
 	// 1. Load configuration
@@ -85,19 +86,19 @@ func main() {
 	// Metrics endpoint
 	mux.Handle("/metrics", monitoring.MakeMetricsHandler(registry))
 
-	// Auth endpoints (no JWT required for signup, verify, login, password reset)
+	// Auth endpoints (no JWT required)
 	mux.Handle("/signup", auth.MakeSignupHandler(sqlDB, mailer, cfg.JWTSecret))
 	mux.Handle("/verify", auth.MakeVerifyHandler(sqlDB))
 	mux.Handle("/login", auth.MakeLoginHandler(sqlDB, cfg.JWTSecret))
 	mux.Handle("/password-reset", auth.MakePasswordResetHandler(sqlDB, mailer, cfg.JWTSecret))
 
-	// Get base URL from environment or use default
+	// Base URL for emails / links
 	baseURL := os.Getenv("BASE_URL")
 	if baseURL == "" {
-		baseURL = "http://localhost:8080" // default for development
+		baseURL = "http://localhost:8080"
 	}
 
-	// Chat endpoint (requires JWT) - FIXED: Added missing mailer and baseURL parameters
+	// Chat endpoint (requires JWT)
 	mux.Handle(
 		"/chat/prompt",
 		auth.RequireJWT(cfg.JWTSecret)(
@@ -121,10 +122,18 @@ func main() {
 		),
 	)
 
+	// Wrap with CORS so your React app at :5173 can call it
+	corsHandler := cors.New(cors.Options{
+		AllowedOrigins:   []string{"http://localhost:5173"},
+		AllowCredentials: true,
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Authorization", "Content-Type"},
+	}).Handler(mux)
+
 	// 10. Start server
 	server := &http.Server{
 		Addr:         cfg.ServerAddress,
-		Handler:      mux,
+		Handler:      corsHandler,
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 10 * time.Second,
 		IdleTimeout:  120 * time.Second,
