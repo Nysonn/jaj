@@ -1,4 +1,6 @@
-# JAJ - Campus Grocery & Necessities Chatbot
+<div align="center">
+  <h1>JAJ - Campus Grocery & Necessities Chatbot</h1>
+</div>
 
 <div align="center">
   <img src="https://res.cloudinary.com/df3lhzzy7/image/upload/v1748836703/jaj-icon_n4pqll.png" alt="JAJ Logo" width="120" height="120">
