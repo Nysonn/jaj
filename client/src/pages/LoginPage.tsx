@@ -335,7 +335,7 @@ const LoginPage: React.FC = () => {
                   <p className="text-center text-gray-600/80">
                     Forgot password?{" "}
                     <Link 
-                      to="/password-reset" 
+                      to="/password-reset-submit-email" 
                       className="text-[#FA5D0F] hover:text-orange-600 font-semibold hover:underline transition-all duration-300 hover:scale-105 inline-block"
                     >
                       Reset here

@@ -18,6 +18,7 @@ import VerifyPage from "./pages/VerifyEmailPage";
 import ChatPage from "./pages/ChatPage";
 import OrdersPage from "./pages/OrdersPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage"
+import NewPassword from "./pages/NewPassword"
 // import AdminLayout from "./pages/Admin/AdminLayout";
 // import AdminCatalogPage from "./pages/Admin/CatalogPage";
 // import AdminOrdersPage from "./pages/Admin/OrdersPage";
@@ -41,7 +42,8 @@ function App() {
       <Route path="/signup" element={<SignupPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/verify" element={<VerifyPage />} />
-       <Route path="/password-reset" element={<ResetPasswordPage />} />
+       <Route path="/password-reset-submit-email" element={<ResetPasswordPage />} />
+        <Route path="/password-reset" element={<NewPassword />} />
 
       {/* Chat and Orders require authentication */}
       <Route
