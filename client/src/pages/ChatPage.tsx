@@ -4,7 +4,7 @@ import type { RootState } from "../app/store";
 import { useMutation } from "@tanstack/react-query";
 import axios from "../api/axiosClient";
 import toast from "react-hot-toast";
-import { FiSend, FiMoon, FiSun } from "react-icons/fi";
+import { FiSend, FiMoon, FiSun, FiMenu, FiX } from "react-icons/fi";
 import ChatSidebar from "../components/ChatSidebar";
 import type { ChatSession } from "../components/ChatSidebar";
 import { toggleDarkMode } from "../app/slices/uiSlice";
@@ -23,47 +23,6 @@ interface ChatMessage {
   isUser: boolean;
   timestamp: Date;
 }
-
-const HamburgerButton: React.FC<{ isOpen: boolean; onClick: () => void; isDarkMode: boolean }> = ({ 
-  isOpen, 
-  onClick, 
-  isDarkMode 
-}) => (
-  <button
-    onClick={onClick}
-    className={`relative w-8 h-8 flex items-center justify-center rounded-lg transition-all duration-300
-      ${isDarkMode 
-        ? 'hover:bg-slate-700/50' 
-        : 'hover:bg-slate-100/50'
-      }
-    `}
-    aria-label="Toggle sidebar"
-  >
-    <div className="relative w-5 h-4">
-      <span className={`absolute w-5 h-0.5 rounded-full transition-all duration-300
-        ${isDarkMode ? 'bg-slate-300' : 'bg-slate-600'}
-        ${isOpen 
-          ? 'top-1.5 rotate-45' 
-          : 'top-0'
-        }
-      `} />
-      <span className={`absolute w-5 h-0.5 rounded-full transition-all duration-300
-        ${isDarkMode ? 'bg-slate-300' : 'bg-slate-600'}
-        ${isOpen 
-          ? 'opacity-0' 
-          : 'top-1.5 opacity-100'
-        }
-      `} />
-      <span className={`absolute w-5 h-0.5 rounded-full transition-all duration-300
-        ${isDarkMode ? 'bg-slate-300' : 'bg-slate-600'}
-        ${isOpen 
-          ? 'top-1.5 -rotate-45' 
-          : 'top-3'
-        }
-      `} />
-    </div>
-  </button>
-);
 
 const ChatPage: React.FC = () => {
   const token = useSelector((state: RootState) => state.auth.token);
@@ -224,22 +183,13 @@ const ChatPage: React.FC = () => {
 
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col min-w-0 relative z-10">
-        {/* Chat Header - Updated with hamburger and dark mode toggle */}
+        {/* Chat Header - Updated with mobile hamburger */}
         <div className={`backdrop-blur-xl border-b px-4 py-3 flex items-center justify-between shadow-lg ${
           isDarkMode 
             ? 'bg-slate-800/70 border-slate-700/30 shadow-blue-900/10' 
             : 'bg-white/70 border-white/30 shadow-orange-500/5'
         }`}>
           <div className="flex items-center space-x-3">
-            {/* Hamburger Button */}
-            <div className="md:hidden">
-              <HamburgerButton 
-                isOpen={!sidebarCollapsed} 
-                onClick={handleToggleCollapse}
-                isDarkMode={isDarkMode}
-              />
-            </div>
-
             <div className="w-10 h-10 rounded-full flex items-center justify-center overflow-hidden relative">
               <div className={`absolute inset-0 rounded-full blur-sm ${
                 isDarkMode 
@@ -281,6 +231,24 @@ const ChatPage: React.FC = () => {
                 <FiSun className="w-5 h-5 text-yellow-400" />
               ) : (
                 <FiMoon className="w-5 h-5 text-blue-600" />
+              )}
+            </button>
+
+            {/* Mobile Hamburger Menu - Only visible on mobile */}
+            <button
+              onClick={handleToggleCollapse}
+              className={`md:hidden relative w-8 h-8 flex items-center justify-center rounded-lg transition-all duration-300
+                ${isDarkMode 
+                  ? 'hover:bg-slate-700/50' 
+                  : 'hover:bg-slate-100/50'
+                }
+              `}
+              aria-label="Toggle sidebar"
+            >
+              {sidebarCollapsed ? (
+                <FiMenu className={`w-5 h-5 ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`} />
+              ) : (
+                <FiX className={`w-5 h-5 ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`} />
               )}
             </button>
           </div>

@@ -283,15 +283,11 @@ const LoginPage: React.FC = () => {
                   )}
                 </div>
 
-                {/* Enhanced submit button with success state */}
+                {/* Updated submit button - removed success state styling */}
                 <button
                   type="submit"
                   disabled={isSubmitting || authLoading || loginMutation.isPending}
-                  className={`group w-full py-4 rounded-2xl font-semibold transition-all duration-300 shadow-lg transform hover:-translate-y-1 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:translate-y-0 ${
-                    loginMutation.isSuccess 
-                      ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-green-500/50' 
-                      : 'bg-gradient-to-r from-[#FA5D0F] to-orange-600 text-white hover:from-orange-600 hover:to-pink-600 shadow-orange-500/30 hover:shadow-orange-500/50 hover:scale-105'
-                  }`}
+                  className={`group w-full py-4 rounded-2xl font-semibold transition-all duration-300 shadow-lg transform hover:-translate-y-1 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:translate-y-0 bg-gradient-to-r from-[#FA5D0F] to-orange-600 text-white hover:from-orange-600 hover:to-pink-600 shadow-orange-500/30 hover:shadow-orange-500/50 hover:scale-105`}
                 >
                   <span className="flex items-center justify-center space-x-2">
                     {loginMutation.isPending ? (
@@ -302,18 +298,11 @@ const LoginPage: React.FC = () => {
                         </svg>
                         <span>Logging in...</span>
                       </>
-                    ) : loginMutation.isSuccess ? (
-                      <>
-                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
-                        <span>Success!</span>
-                      </>
                     ) : (
                       <>
                         <span>Log In</span>
                         <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013 3v1" />
                         </svg>
                       </>
                     )}

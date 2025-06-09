@@ -10,6 +10,9 @@ import {
   FiUser,
   FiHeart,
   FiTrendingUp,
+  FiMenu,
+  FiChevronLeft,
+  FiChevronRight,
 } from "react-icons/fi";
 
 export interface ChatSession {
@@ -29,45 +32,29 @@ interface ChatSidebarProps {
   onMenuSelect?: (menu: string) => void;
 }
 
-// Add this new component for the animated hamburger menu
-const HamburgerButton: React.FC<{ isOpen: boolean; onClick: () => void; isDarkMode: boolean }> = ({ 
-  isOpen, 
-  onClick, 
-  isDarkMode 
-}) => (
+// Desktop Hamburger Button Component
+const DesktopHamburgerButton: React.FC<{ 
+  isCollapsed: boolean; 
+  onClick: () => void; 
+  isDarkMode: boolean; 
+}> = ({ isCollapsed, onClick, isDarkMode }) => (
   <button
     onClick={onClick}
-    className={`relative w-8 h-8 flex items-center justify-center rounded-lg transition-all duration-300
+    className={`
+      hidden md:flex items-center justify-center w-8 h-8 rounded-lg transition-all duration-300 hover:scale-110
       ${isDarkMode 
-        ? 'hover:bg-slate-700/50' 
-        : 'hover:bg-slate-100/50'
+        ? 'hover:bg-slate-700/50 text-slate-300 hover:text-blue-300' 
+        : 'hover:bg-slate-100/50 text-slate-600 hover:text-blue-600'
       }
     `}
     aria-label="Toggle sidebar"
+    title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
   >
-    <div className="relative w-5 h-4">
-      <span className={`absolute w-5 h-0.5 rounded-full transition-all duration-300
-        ${isDarkMode ? 'bg-slate-300' : 'bg-slate-600'}
-        ${isOpen 
-          ? 'top-1.5 rotate-45' 
-          : 'top-0'
-        }
-      `} />
-      <span className={`absolute w-5 h-0.5 rounded-full transition-all duration-300
-        ${isDarkMode ? 'bg-slate-300' : 'bg-slate-600'}
-        ${isOpen 
-          ? 'opacity-0' 
-          : 'top-1.5 opacity-100'
-        }
-      `} />
-      <span className={`absolute w-5 h-0.5 rounded-full transition-all duration-300
-        ${isDarkMode ? 'bg-slate-300' : 'bg-slate-600'}
-        ${isOpen 
-          ? 'top-1.5 -rotate-45' 
-          : 'top-3'
-        }
-      `} />
-    </div>
+    {isCollapsed ? (
+      <FiChevronRight className="w-5 h-5 transition-transform duration-300" />
+    ) : (
+      <FiChevronLeft className="w-5 h-5 transition-transform duration-300" />
+    )}
   </button>
 );
 
@@ -115,20 +102,70 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({
         shadow-lg md:shadow-md backdrop-blur-xl
       `}>
         
-        {/* Header Section - Simplified without hamburger and dark mode toggle */}
+        {/* Header Section - Updated with desktop hamburger */}
         <div className={`relative z-10 p-3 border-b backdrop-blur-sm flex-shrink-0 ${
           isDarkMode 
             ? 'border-slate-700/20 bg-slate-800/20' 
             : 'border-slate-200/40 bg-white/20'
         }`}>
-          <div className="flex items-center justify-center">
-            {!sidebarCollapsed ? (
-              <div className="flex items-center space-x-2">
-                <div className="relative group">
-                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center backdrop-blur-sm border shadow-lg overflow-hidden transition-all duration-300 group-hover:scale-105 ${
+          <div className="flex items-center justify-between">
+            {/* Left side - Desktop Hamburger (only visible on desktop when sidebar is expanded) */}
+            <div className="flex items-center">
+              {!sidebarCollapsed && (
+                <DesktopHamburgerButton
+                  isCollapsed={sidebarCollapsed}
+                  onClick={onToggleCollapse}
+                  isDarkMode={isDarkMode}
+                />
+              )}
+            </div>
+
+            {/* Center - Logo and Brand */}
+            <div className="flex items-center justify-center flex-1">
+              {!sidebarCollapsed ? (
+                <div className="flex items-center space-x-2">
+                  <div className="relative group">
+                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center backdrop-blur-sm border shadow-lg overflow-hidden transition-all duration-300 group-hover:scale-105 ${
+                      isDarkMode 
+                        ? 'bg-gradient-to-br from-blue-600/30 to-slate-600/20 border-blue-500/30' 
+                        : 'bg-gradient-to-br from-blue-500/20 to-slate-500/15 border-blue-400/30'
+                    }`}>
+                      <img 
+                        src="https://res.cloudinary.com/df3lhzzy7/image/upload/v1748836703/jaj-icon_n4pqll.png" 
+                        alt="JAJ Delivery" 
+                        className="w-full h-full object-contain drop-shadow-lg"
+                      />
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-0.5">
+                    <h1 className={`text-lg font-bold bg-clip-text text-transparent ${
+                      isDarkMode 
+                        ? 'bg-gradient-to-r from-blue-400 to-slate-400' 
+                        : 'bg-gradient-to-r from-blue-600 to-slate-600'
+                    }`}>
+                      JAJ
+                    </h1>
+                    <div className={`flex items-center space-x-1 text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                      <div className={`w-1.5 h-1.5 rounded-full ${isDarkMode ? 'bg-green-400' : 'bg-green-500'} animate-pulse`} />
+                      <span>Online</span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center space-y-2">
+                  {/* Collapsed state - Show hamburger button at top */}
+                  <DesktopHamburgerButton
+                    isCollapsed={sidebarCollapsed}
+                    onClick={onToggleCollapse}
+                    isDarkMode={isDarkMode}
+                  />
+                  
+                  {/* Logo below hamburger in collapsed state */}
+                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center backdrop-blur-sm border shadow-lg overflow-hidden ${
                     isDarkMode 
-                      ? 'bg-gradient-to-br from-blue-600/30 to-slate-600/20 border-blue-500/30' 
-                      : 'bg-gradient-to-br from-blue-500/20 to-slate-500/15 border-blue-400/30'
+                      ? 'bg-gradient-to-r from-blue-600/20 to-slate-600/20 border-slate-600/30' 
+                      : 'bg-gradient-to-r from-blue-500/20 to-slate-500/20 border-slate-200/30'
                   }`}>
                     <img 
                       src="https://res.cloudinary.com/df3lhzzy7/image/upload/v1748836703/jaj-icon_n4pqll.png" 
@@ -137,36 +174,13 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({
                     />
                   </div>
                 </div>
-                
-                <div className="space-y-0.5">
-                  <h1 className={`text-lg font-bold bg-clip-text text-transparent ${
-                    isDarkMode 
-                      ? 'bg-gradient-to-r from-blue-400 to-slate-400' 
-                      : 'bg-gradient-to-r from-blue-600 to-slate-600'
-                  }`}>
-                    JAJ
-                  </h1>
-                  <div className={`flex items-center space-x-1 text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                    <div className={`w-1.5 h-1.5 rounded-full ${isDarkMode ? 'bg-green-400' : 'bg-green-500'} animate-pulse`} />
-                    <span>Online</span>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="flex justify-center w-full">
-                <div className={`w-8 h-8 rounded-xl flex items-center justify-center backdrop-blur-sm border shadow-lg overflow-hidden ${
-                  isDarkMode 
-                    ? 'bg-gradient-to-r from-blue-600/20 to-slate-600/20 border-slate-600/30' 
-                    : 'bg-gradient-to-r from-blue-500/20 to-slate-500/20 border-slate-200/30'
-                }`}>
-                  <img 
-                    src="https://res.cloudinary.com/df3lhzzy7/image/upload/v1748836703/jaj-icon_n4pqll.png" 
-                    alt="JAJ Delivery" 
-                    className="w-full h-full object-contain drop-shadow-lg"
-                  />
-                </div>
-              </div>
-            )}
+              )}
+            </div>
+
+            {/* Right side - Empty space for balance */}
+            <div className="flex items-center">
+              {/* This ensures the center content stays centered */}
+            </div>
           </div>
         </div>
 

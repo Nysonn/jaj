@@ -292,7 +292,7 @@ Examples:
   → Output: [{"name":"Jesa Milk (2L)","quantity":1},{"name":"Coca-Cola (330ml)","quantity":1}]
 - Input: "Give me two Lipton Black Tea (50g) and Detergent Powder (2kg)"
   → Output: [{"name":"Lipton Black Tea (50g)","quantity":2},{"name":"Detergent Powder (2kg)","quantity":1}]
-- Input: "I need 5 bread loaves"	
+- Input: "I need 5 bread loaves"
   → Output: [{"name":"bread loaves","quantity":5}]
 - Input: "I would like to buy toothpaste"
   → Output: [{"name":"toothpaste","quantity":1}]
