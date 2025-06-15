@@ -11,7 +11,6 @@ import (
 
 	"server/internal/email"
 
-	"github.com/golang-jwt/jwt/v4"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -121,14 +120,16 @@ func MakeVerifyHandler(db *sql.DB) http.HandlerFunc {
 	}
 }
 
-// MakeLoginHandler authenticates users and issues JWT.
-func MakeLoginHandler(db *sql.DB, jwtSecret string) http.HandlerFunc {
+// Updated MakeLoginHandler: creates a session row & sets a cookie instead of returning a JWT.
+func MakeLoginHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// 1) Only POST
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
 
+		// 2) Parse credentials
 		var req LoginRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, "invalid JSON payload", http.StatusBadRequest)
@@ -136,13 +137,18 @@ func MakeLoginHandler(db *sql.DB, jwtSecret string) http.HandlerFunc {
 		}
 		defer r.Body.Close()
 
+		// 3) Lookup user
 		var (
 			hash     string
 			verified bool
 			userID   int
 		)
-		const q = `SELECT id, password_hash, verified FROM users WHERE email = $1`
-		if err := db.QueryRowContext(r.Context(), q, req.Email).Scan(&userID, &hash, &verified); err != nil {
+		const qUser = `
+            SELECT id, password_hash, verified
+            FROM users
+            WHERE email = $1
+        `
+		if err := db.QueryRowContext(r.Context(), qUser, req.Email).Scan(&userID, &hash, &verified); err != nil {
 			http.Error(w, "invalid credentials", http.StatusUnauthorized)
 			return
 		}
@@ -151,24 +157,84 @@ func MakeLoginHandler(db *sql.DB, jwtSecret string) http.HandlerFunc {
 			return
 		}
 
+		// 4) Verify password
 		if err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(req.Password)); err != nil {
 			http.Error(w, "invalid credentials", http.StatusUnauthorized)
 			return
 		}
 
-		// Issue JWT
-		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-			"user_id": userID,
-			"exp":     time.Now().Add(time.Hour).Unix(),
-		})
-		tokenString, err := token.SignedString([]byte(jwtSecret))
-		if err != nil {
-			http.Error(w, "failed to sign token", http.StatusInternalServerError)
+		// 5) Generate a random session token
+		tokenBytes := make([]byte, 16)
+		if _, err := rand.Read(tokenBytes); err != nil {
+			http.Error(w, "failed to generate session token", http.StatusInternalServerError)
+			return
+		}
+		sessionToken := hex.EncodeToString(tokenBytes)
+
+		// 6) Compute expiry (6 months from now)
+		expiresAt := time.Now().AddDate(0, 6, 0)
+
+		// 7) Insert session into Postgres
+		const qSession = `
+            INSERT INTO sessions (user_id, token, expires_at)
+            VALUES ($1, $2, $3)
+        `
+		if _, err := db.ExecContext(r.Context(), qSession, userID, sessionToken, expiresAt); err != nil {
+			http.Error(w, "failed to create session", http.StatusInternalServerError)
 			return
 		}
 
+		// 8) Set cookie on response
+		http.SetCookie(w, &http.Cookie{
+			Name:     "session_token",
+			Value:    sessionToken,
+			Path:     "/",
+			Expires:  expiresAt,
+			HttpOnly: true,
+			// Secure should be true in prod (HTTPS)
+			Secure:   false,
+			SameSite: http.SameSiteLaxMode,
+		})
+
+		// 9) Return 200 OK with simple JSON
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"token": tokenString})
+		json.NewEncoder(w).Encode(Response{Message: "Login successful"})
+	}
+}
+
+// MakeProfileHandler returns the logged-in user's basic info.
+func MakeProfileHandler(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// 1) Extract user_id from context
+		uidVal := r.Context().Value(ContextUserIDKey)
+		userID, ok := uidVal.(int)
+		if !ok {
+			http.Error(w, "failed to get user from context", http.StatusInternalServerError)
+			return
+		}
+
+		// 2) Query user info
+		var (
+			username string
+			email    string
+		)
+		const q = `
+            SELECT username, email
+            FROM users
+            WHERE id = $1
+        `
+		if err := db.QueryRowContext(r.Context(), q, userID).Scan(&username, &email); err != nil {
+			http.Error(w, "user not found", http.StatusNotFound)
+			return
+		}
+
+		// 3) Respond with JSON
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"id":       userID,
+			"username": username,
+			"email":    email,
+		})
 	}
 }
 

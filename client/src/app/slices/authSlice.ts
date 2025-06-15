@@ -1,16 +1,22 @@
-import { createSlice} from "@reduxjs/toolkit";
+import { createSlice } from "@reduxjs/toolkit";
 import type { PayloadAction } from "@reduxjs/toolkit"
 
 interface AuthState {
-  token: string | null;
+  isAuthenticated: boolean;
   loading: boolean;
   error: string | null;
+  user: {
+    id?: number;
+    username?: string;
+    email?: string;
+  } | null;
 }
 
 const initialState: AuthState = {
-  token: null,
+  isAuthenticated: false,
   loading: false,
   error: null,
+  user: null,
 };
 
 const authSlice = createSlice({
@@ -21,22 +27,39 @@ const authSlice = createSlice({
       state.loading = true;
       state.error = null;
     },
-    loginSuccess(state, action: PayloadAction<string>) {
+    loginSuccess(state, action: PayloadAction<{ message: string }>) {
       state.loading = false;
-      state.token = action.payload;
+      state.isAuthenticated = true;
       state.error = null;
     },
     loginFailure(state, action: PayloadAction<string>) {
       state.loading = false;
+      state.isAuthenticated = false;
       state.error = action.payload;
     },
+    setUser(state, action: PayloadAction<{ id: number; username: string; email: string }>) {
+      state.user = action.payload;
+      state.isAuthenticated = true;
+    },
     logout(state) {
-      state.token = null;
+      state.isAuthenticated = false;
       state.loading = false;
+      state.error = null;
+      state.user = null;
+    },
+    clearError(state) {
       state.error = null;
     },
   },
 });
 
-export const { loginStart, loginSuccess, loginFailure, logout } = authSlice.actions;
+export const { 
+  loginStart, 
+  loginSuccess, 
+  loginFailure, 
+  logout, 
+  setUser, 
+  clearError 
+} = authSlice.actions;
+
 export default authSlice.reducer;

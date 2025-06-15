@@ -1,24 +1,32 @@
 import axios from "axios";
-import type { RootState } from "../app/store";
-import store from "../app/store";
-
-const baseURL = import.meta.env.VITE_API_URL || "";
 
 const axiosClient = axios.create({
-  baseURL,
+  baseURL: "http://localhost:8080", // Your backend URL
+  timeout: 10000,
+  withCredentials: true, // This is crucial for sending cookies
   headers: {
     "Content-Type": "application/json",
   },
 });
 
-// Request interceptor to inject JWT
-axiosClient.interceptors.request.use((config) => {
-  const state: RootState = store.getState();
-  const token = state.auth.token;
-  if (token && config.headers) {
-    config.headers.Authorization = `Bearer ${token}`;
+// Response interceptor to handle errors globally
+axiosClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      // Session expired or invalid - redirect to login
+      // You might want to dispatch a logout action here
+      window.location.href = '/login';
+    }
+    
+    // Extract error message from response
+    const message = error.response?.data?.message || 
+                   error.response?.data?.error || 
+                   error.message || 
+                   'An unexpected error occurred';
+    
+    return Promise.reject(new Error(message));
   }
-  return config;
-});
+);
 
 export default axiosClient;

@@ -27,43 +27,34 @@ import (
 )
 
 func main() {
-	// Automatically load the environment variables
 	_ = godotenv.Load()
 
-	// 1. Load configuration
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("config load: %v", err)
 	}
 
-	// 2. Create a context for GenAI calls
 	ctx := context.Background()
-
-	// 3. Read the API key from env
 	apiKey := os.Getenv("GEMINI_API_KEY")
 	if apiKey == "" {
-		log.Fatal("GEMINI_API_KEY must be set in environment")
+		log.Fatal("GEMINI_API_KEY must be set")
 	}
-
-	// 4. Initialize the GenAI client with the correct API
 	genaiClient, err := genai.NewClient(ctx, option.WithAPIKey(apiKey))
 	if err != nil {
-		log.Fatalf("failed to initialize Gemini SDK: %v", err)
+		log.Fatalf("GenAI init failed: %v", err)
 	}
 	defer genaiClient.Close()
 
-	// 5. Initialize logger & metrics
 	logger := monitoring.NewLogger()
 	registry := monitoring.NewRegistry()
 
-	// 6. Connect to DB
 	sqlDB, err := db.Connect(cfg.DatabaseURL)
 	if err != nil {
 		logger.Fatal("db connect failed", zap.Error(err))
 	}
 	defer sqlDB.Close()
 
-	// 7. Run migrations
+	// Migrations
 	driver, err := postgres.WithInstance(sqlDB, &postgres.Config{})
 	if err != nil {
 		logger.Fatal("migrate driver init failed", zap.Error(err))
@@ -77,60 +68,62 @@ func main() {
 	}
 	logger.Info("migrations applied")
 
-	// 8. Initialize SMTP client
 	mailer := email.NewClient(cfg.SMTPHost, cfg.SMTPUser, cfg.SMTPPass)
 
-	// 9. Set up HTTP handlers
 	mux := http.NewServeMux()
-
-	// Metrics endpoint
 	mux.Handle("/metrics", monitoring.MakeMetricsHandler(registry))
 
-	// Auth endpoints (no JWT required)
+	// Auth endpoints (public)
 	mux.Handle("/signup", auth.MakeSignupHandler(sqlDB, mailer, cfg.JWTSecret))
 	mux.Handle("/verify", auth.MakeVerifyHandler(sqlDB))
-	mux.Handle("/login", auth.MakeLoginHandler(sqlDB, cfg.JWTSecret))
+	mux.Handle("/login", auth.MakeLoginHandler(sqlDB)) // no jwtSecret now
 	mux.Handle("/password-reset", auth.MakePasswordResetHandler(sqlDB, mailer, cfg.JWTSecret))
 
-	// Base URL for emails / links
+	// Profile endpoint (requires valid session cookie)
+	mux.Handle(
+		"/me",
+		auth.RequireSession(sqlDB)(
+			auth.MakeProfileHandler(sqlDB),
+		),
+	)
+
 	baseURL := os.Getenv("BASE_URL")
 	if baseURL == "" {
 		baseURL = "http://localhost:8080"
 	}
 
-	// Chat endpoint (requires JWT)
+	// Chat endpoint
 	mux.Handle(
 		"/chat/prompt",
-		auth.RequireJWT(cfg.JWTSecret)(
+		auth.RequireSession(sqlDB)(
 			chat.MakePromptHandler(sqlDB, logger, registry, genaiClient, mailer, baseURL),
 		),
 	)
 
-	// Orders endpoint (requires JWT)
+	// Orders endpoint
 	mux.Handle(
 		"/orders",
-		auth.RequireJWT(cfg.JWTSecret)(
+		auth.RequireSession(sqlDB)(
 			orders.MakeOrdersHandler(sqlDB, logger, registry, mailer),
 		),
 	)
 
-	// Admin endpoints (protected by JWT)
+	// Admin router
 	mux.Handle(
 		"/admin/",
-		auth.RequireJWT(cfg.JWTSecret)(
+		auth.RequireSession(sqlDB)(
 			admin.MakeAdminRouter(sqlDB, logger),
 		),
 	)
 
-	// Wrap with CORS so your React app at :5173 can call it
+	// CORS (allows cookie credentials)
 	corsHandler := cors.New(cors.Options{
 		AllowedOrigins:   []string{"http://localhost:5173"},
 		AllowCredentials: true,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Authorization", "Content-Type"},
+		AllowedHeaders:   []string{"Content-Type"}, // no more Authorization header
 	}).Handler(mux)
 
-	// 10. Start server
 	server := &http.Server{
 		Addr:         cfg.ServerAddress,
 		Handler:      corsHandler,
@@ -139,7 +132,7 @@ func main() {
 		IdleTimeout:  120 * time.Second,
 	}
 
-	logger.Info("starting JAJ server", zap.String("addr", cfg.ServerAddress))
+	logger.Info("starting server", zap.String("addr", cfg.ServerAddress))
 	if err := server.ListenAndServe(); err != nil {
 		logger.Fatal("server failed", zap.Error(err))
 	}

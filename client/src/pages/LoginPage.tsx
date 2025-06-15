@@ -13,10 +13,10 @@ type LoginInputs = {
 };
 
 interface LoginResponse {
-  token: string;
+  message: string;
 }
 
-// Custom notification component
+// Custom notification component (unchanged)
 interface NotificationProps {
   type: 'success' | 'error';
   message: string;
@@ -142,7 +142,7 @@ const LoginPage: React.FC = () => {
     setNotification(prev => ({ ...prev, isVisible: false }));
   };
 
-  // React Query mutation for login
+  // React Query mutation for login - updated for session-based auth
   const loginMutation = usePost<LoginInputs, LoginResponse>(
     "login",
     "/login",
@@ -151,7 +151,8 @@ const LoginPage: React.FC = () => {
         dispatch(loginStart());
       },
       onSuccess: (data) => {
-        dispatch(loginSuccess(data.token));
+        // No token returned, just success message
+        dispatch(loginSuccess(data));
         showNotification('success', 'Welcome back! Redirecting to your dashboard...');
         setTimeout(() => {
           navigate("/chat");
@@ -283,7 +284,7 @@ const LoginPage: React.FC = () => {
                   )}
                 </div>
 
-                {/* Updated submit button - removed success state styling */}
+                {/* Submit button */}
                 <button
                   type="submit"
                   disabled={isSubmitting || authLoading || loginMutation.isPending}

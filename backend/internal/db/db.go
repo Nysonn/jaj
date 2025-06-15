@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	_ "github.com/lib/pq" // Postgres driver
+	_ "github.com/lib/pq"
 )
 
 // Connect opens a database pool and verifies connectivity.
