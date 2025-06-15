@@ -121,7 +121,9 @@ func main() {
 		AllowedOrigins:   []string{"http://localhost:5173"},
 		AllowCredentials: true,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Content-Type"}, // no more Authorization header
+		AllowedHeaders:   []string{"Content-Type", "Authorization", "Accept", "Origin", "X-Requested-With"},
+		ExposedHeaders:   []string{"Content-Length", "Content-Type"},
+		MaxAge:           300, // Maximum value not ignored by any of major browsers
 	}).Handler(mux)
 
 	server := &http.Server{
