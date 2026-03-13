@@ -6,7 +6,7 @@ import type { RootState } from "../app/store";
 
 const Navbar: React.FC = () => {
   const dispatch = useDispatch();
-  const token = useSelector((state: RootState) => state.auth.token);
+  const token = useSelector((state: RootState) => state.auth.isAuthenticated);
 
   return (
     <nav className="bg-white border-b border-gray-200 px-4 py-2 flex items-center justify-between">

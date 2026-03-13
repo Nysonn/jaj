@@ -13,7 +13,7 @@ const ResetPasswordPage: React.FC = () => {
 
   // Use the custom hook
   const { sendResetEmail, resetPassword } = usePasswordReset({
-    baseUrl: "http://localhost:8080", 
+    baseUrl: import.meta.env.VITE_API_URL,
     onEmailSuccess: () => {
       // Redirect to password-reset page after successful email submission
       console.log("Reset email sent successfully");

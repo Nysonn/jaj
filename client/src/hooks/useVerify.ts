@@ -15,7 +15,7 @@ interface UseVerifyTokenOptions {
 }
 
 const verifyToken = async (token: string): Promise<VerifyResponse> => {
-  const response = await fetch(`http://localhost:8080/verify?token=${encodeURIComponent(token)}`);
+  const response = await fetch(`${import.meta.env.VITE_API_URL}/verify?token=${encodeURIComponent(token)}`);
   
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));

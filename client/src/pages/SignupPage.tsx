@@ -77,7 +77,7 @@ const SignupPage: React.FC = () => {
     
     // Use the mutation with updated success/error handling
     signupMutation.mutate(formData, {
-      onSuccess: (data) => {
+      onSuccess: (_data) => {
         showNotification('success', 'Account created successfully! Redirecting to verification...');
         // Reset form on success
         setFormData({ username: '', email: '', password: '' });

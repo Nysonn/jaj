@@ -1,7 +1,7 @@
 import axios from "axios";
 
 const axiosClient = axios.create({
-  baseURL: "http://localhost:8080", // Your backend URL
+  baseURL: import.meta.env.VITE_API_URL,
   timeout: 10000,
   withCredentials: true, // This is crucial for sending cookies
   headers: {

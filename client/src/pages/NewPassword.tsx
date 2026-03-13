@@ -15,7 +15,7 @@ const NewPassword: React.FC = () => {
 
   // Use the custom hook
   const { resetPassword } = usePasswordReset({
-    baseUrl: "http://localhost:8080",
+    baseUrl: import.meta.env.VITE_API_URL,
     onPasswordResetSuccess: () => {
       console.log("Password reset successfully");
     },

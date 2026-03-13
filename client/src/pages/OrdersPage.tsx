@@ -1,6 +1,4 @@
 import React, { useState, useEffect } from "react";
-import { useSelector } from "react-redux";
-import type { RootState } from "../app/store";
 import { useQuery } from "@tanstack/react-query";
 import axios from "../api/axiosClient";
 import toast from "react-hot-toast";
@@ -32,19 +30,12 @@ interface FetchOrdersParams {
   limit?: number;
 }
 
-const fetchOrders = async (
-  token: string,
-  params: FetchOrdersParams
-): Promise<Order[]> => {
-  const response = await axios.get<Order[]>("/orders", {
-    params,
-    headers: { Authorization: `Bearer ${token}` },
-  });
+const fetchOrders = async (params: FetchOrdersParams): Promise<Order[]> => {
+  const response = await axios.get<Order[]>("/orders", { params });
   return response.data;
 };
 
 const OrdersPage: React.FC = () => {
-  const token = useSelector((state: RootState) => state.auth.token);
 
   // Local filter controls
   const [statusFilter, setStatusFilter] = useState<string>("");
@@ -62,7 +53,7 @@ const OrdersPage: React.FC = () => {
   } = useQuery({
     queryKey: ["orders", { status: statusFilter, date: dateFilter, page }],
     queryFn: () =>
-      fetchOrders(token!, {
+      fetchOrders({
         status: statusFilter || undefined,
         date: dateFilter || undefined,
         page,

@@ -25,12 +25,10 @@ interface ChatMessage {
 }
 
 const ChatPage: React.FC = () => {
-  const token = useSelector((state: RootState) => state.auth.token);
   const isDarkMode = useSelector((state: RootState) => state.ui.darkMode);
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
-  const [mounted, setMounted] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -63,11 +61,6 @@ const ChatPage: React.FC = () => {
 
   const [activeChat, setActiveChat] = useState("1");
 
-  // Mount animation
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
   // Auto-scroll to bottom when new messages are added
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -81,9 +74,7 @@ const ChatPage: React.FC = () => {
   // Mutation to send chat prompt
   const mutation = useMutation({
     mutationFn: (payload: ChatRequest) =>
-      axios.post<ChatResponse>("/chat/prompt", payload, {
-        headers: { Authorization: `Bearer ${token}` },
-      }),
+      axios.post<ChatResponse>("/chat/prompt", payload),
     onSuccess: (res) => {
       const assistantMessage: ChatMessage = {
         id: Date.now().toString() + '_assistant',

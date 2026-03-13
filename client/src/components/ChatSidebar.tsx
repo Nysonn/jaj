@@ -10,7 +10,6 @@ import {
   FiUser,
   FiHeart,
   FiTrendingUp,
-  FiMenu,
   FiChevronLeft,
   FiChevronRight,
 } from "react-icons/fi";
