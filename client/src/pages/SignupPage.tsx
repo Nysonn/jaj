@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { Eye, EyeOff, User, Mail, Lock, ArrowRight, CheckCircle, AlertCircle, X } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { useSignup } from "../hooks/useSignup"; 
 
 const SignupPage: React.FC = () => {
+  const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [formData, setFormData] = useState({
@@ -78,14 +80,14 @@ const SignupPage: React.FC = () => {
     // Use the mutation with updated success/error handling
     signupMutation.mutate(formData, {
       onSuccess: (_data) => {
-        showNotification('success', 'Account created successfully! Redirecting to verification...');
+        showNotification('success', 'Account created successfully! Redirecting to login...');
         // Reset form on success
         setFormData({ username: '', email: '', password: '' });
         setErrors({});
         
-        // Redirect to verify page after a short delay to show the success message
+        // Redirect to login page after a short delay to show the success message
         setTimeout(() => {
-          window.location.href = '/verify';
+          navigate('/login');
         }, 2000);
       },
       onError: (error) => {
@@ -360,7 +362,7 @@ const SignupPage: React.FC = () => {
               <div className="text-center">
                 <button
                   type="button"
-                  onClick={() => window.location.href = '/login'}
+                  onClick={() => navigate('/login')}
                   className="group inline-flex items-center space-x-2 text-[#FA5D0F] hover:text-orange-600 font-medium transition-colors duration-200"
                 >
                   <span>Sign in instead</span>

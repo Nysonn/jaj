@@ -32,8 +32,8 @@ type Response struct {
 	Message string `json:"message"`
 }
 
-// MakeSignupHandler registers new users and sends verification email.
-func MakeSignupHandler(db *sql.DB, mailer *email.Client, jwtSecret string) http.HandlerFunc {
+// MakeSignupHandler registers new users and enables immediate login.
+func MakeSignupHandler(db *sql.DB, _ *email.Client, _ string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -64,30 +64,15 @@ func MakeSignupHandler(db *sql.DB, mailer *email.Client, jwtSecret string) http.
 			return
 		}
 
-		// Generate verification token
-		tokenBytes := make([]byte, 16)
-		if _, err := rand.Read(tokenBytes); err != nil {
-			http.Error(w, "failed to generate token", http.StatusInternalServerError)
-			return
-		}
-		verifyToken := hex.EncodeToString(tokenBytes)
-
 		// Insert user
-		const q = `INSERT INTO users (username, email, password_hash, verification_token) VALUES ($1, $2, $3, $4)`
-		if _, err := db.ExecContext(r.Context(), q, req.Username, req.Email, string(hash), verifyToken); err != nil {
+		const q = `INSERT INTO users (username, email, password_hash, verified) VALUES ($1, $2, $3, TRUE)`
+		if _, err := db.ExecContext(r.Context(), q, req.Username, req.Email, string(hash)); err != nil {
 			http.Error(w, "user already registered", http.StatusConflict)
 			return
 		}
 
-		// Send verification email asynchronously and log errors incase it fails
-		go func() {
-			if err := mailer.SendVerificationEmail(req.Email, req.Username, verifyToken); err != nil {
-				log.Printf("ERROR sending signup verification to %s: %v", req.Email, err)
-			}
-		}()
-
 		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(Response{Message: "Signup successful; please check your email to verify your account."})
+		json.NewEncoder(w).Encode(Response{Message: "Signup successful. You can now log in."})
 	}
 }
 
@@ -139,21 +124,16 @@ func MakeLoginHandler(db *sql.DB) http.HandlerFunc {
 
 		// 3) Lookup user
 		var (
-			hash     string
-			verified bool
-			userID   int
+			hash   string
+			userID int
 		)
 		const qUser = `
-            SELECT id, password_hash, verified
+            SELECT id, password_hash
             FROM users
             WHERE email = $1
         `
-		if err := db.QueryRowContext(r.Context(), qUser, req.Email).Scan(&userID, &hash, &verified); err != nil {
+		if err := db.QueryRowContext(r.Context(), qUser, req.Email).Scan(&userID, &hash); err != nil {
 			http.Error(w, "invalid credentials", http.StatusUnauthorized)
-			return
-		}
-		if !verified {
-			http.Error(w, "email not verified", http.StatusForbidden)
 			return
 		}
 

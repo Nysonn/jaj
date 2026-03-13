@@ -9,7 +9,7 @@ export function useGet<T>(
   url: string,
   options?: Omit<UseQueryOptions<T, Error>, "queryKey" | "queryFn">
 ) {
-  const query = useQuery<T, Error>({
+  return useQuery<T, Error>({
     queryKey: Array.isArray(key) ? key : [key],
     queryFn: async () => {
       const { data } = await axiosClient.get<T>(url);
@@ -17,13 +17,6 @@ export function useGet<T>(
     },
     ...options,
   });
-
-  // Handle errors with toast notifications
-  if (query.error) {
-    toast.error(query.error.message || "An error occurred");
-  }
-
-  return query;
 }
 
 // Generic POST/MUTATION wrapper

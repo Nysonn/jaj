@@ -47,7 +47,7 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useSelector((state: RootState) => state.auth.isAuthenticated);
 
   // Check if user has a valid session on app load
-  const { data: user, error, isLoading } = useGet<{
+  const { data: user } = useGet<{
     id: number;
     username: string;
     email: string;
@@ -64,11 +64,8 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (user) {
       dispatch(setUser(user));
-    } else if (error && !isLoading) {
-      // If there's an error fetching user info, ensure logout state
-      dispatch(logout());
     }
-  }, [user, error, isLoading, dispatch]);
+  }, [user, dispatch]);
 
   return <>{children}</>;
 }
