@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/golang-migrate/migrate/v4"
@@ -22,6 +23,33 @@ import (
 	"server/internal/monitoring"
 	"server/internal/orders"
 )
+
+func buildAllowedOrigins() []string {
+	defaults := []string{
+		"http://localhost:5173",
+		"http://127.0.0.1:5173",
+		"http://localhost:4173",
+		"http://127.0.0.1:4173",
+		"https://jaj-delivery.web.app",
+		"https://jaj-delivery.firebaseapp.com",
+	}
+
+	extra := os.Getenv("FRONTEND_ORIGINS")
+	if strings.TrimSpace(extra) == "" {
+		return defaults
+	}
+
+	origins := make([]string, 0, len(defaults)+4)
+	origins = append(origins, defaults...)
+	for _, origin := range strings.Split(extra, ",") {
+		origin = strings.TrimSpace(origin)
+		if origin != "" {
+			origins = append(origins, origin)
+		}
+	}
+
+	return origins
+}
 
 func main() {
 	_ = godotenv.Load()
@@ -108,8 +136,9 @@ func main() {
 	)
 
 	// CORS (allows cookie credentials)
+	allowedOrigins := buildAllowedOrigins()
 	corsHandler := cors.New(cors.Options{
-		AllowedOrigins:   []string{"http://localhost:5173", "https://jaj-delivery.web.app"},
+		AllowedOrigins:   allowedOrigins,
 		AllowCredentials: true,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Content-Type", "Authorization", "Accept", "Origin", "X-Requested-With"},
