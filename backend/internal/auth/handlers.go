@@ -6,7 +6,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"log"
+	"net"
 	"net/http"
+	"net/url"
+	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"server/internal/email"
@@ -30,6 +35,44 @@ type LoginRequest struct {
 // Response holds a generic JSON message.
 type Response struct {
 	Message string `json:"message"`
+}
+
+func shouldUseSecureCookies(r *http.Request) bool {
+	// Allow explicit override for environments where proxy headers are unavailable.
+	if v := strings.TrimSpace(os.Getenv("COOKIE_SECURE")); v != "" {
+		if parsed, err := strconv.ParseBool(v); err == nil {
+			return parsed
+		}
+	}
+
+	if r.TLS != nil {
+		return true
+	}
+
+	if strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
+		return true
+	}
+
+	origin := strings.TrimSpace(r.Header.Get("Origin"))
+	if origin == "" {
+		return false
+	}
+
+	originURL, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+
+	host := originURL.Hostname()
+	if host == "localhost" || host == "127.0.0.1" || host == "::1" {
+		return false
+	}
+
+	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+		return false
+	}
+
+	return strings.EqualFold(originURL.Scheme, "https")
 }
 
 // MakeSignupHandler registers new users and enables immediate login.
@@ -164,16 +207,22 @@ func MakeLoginHandler(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		// 8) Set cookie on response
+		// 8) Set cookie on response.
+		// Cross-site auth requires SameSite=None + Secure on HTTPS deployments.
+		secureCookie := shouldUseSecureCookies(r)
+		sameSiteMode := http.SameSiteLaxMode
+		if secureCookie {
+			sameSiteMode = http.SameSiteNoneMode
+		}
+
 		http.SetCookie(w, &http.Cookie{
 			Name:     "session_token",
 			Value:    sessionToken,
 			Path:     "/",
 			Expires:  expiresAt,
 			HttpOnly: true,
-			// Secure should be true in prod (HTTPS)
-			Secure:   false,
-			SameSite: http.SameSiteLaxMode,
+			Secure:   secureCookie,
+			SameSite: sameSiteMode,
 		})
 
 		// 9) Return 200 OK with simple JSON
