@@ -15,10 +15,8 @@ import (
 	"server/internal/auth"
 	"server/internal/email"
 
-	"github.com/google/generative-ai-go/genai"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
-	"google.golang.org/api/iterator"
 )
 
 // ── TYPES ───────────────────────────────────────────────────────────────────────
@@ -41,14 +39,70 @@ type confirmedItem struct {
 	UnitPrice int
 }
 
-// ── MAKE PROMPT HANDLER (WITH PERSISTENT “PENDING” STATE + SMTP EMAIL TEMPLATING) ───
+// ── GROQ CLIENT ─────────────────────────────────────────────────────────────────
+type groqMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+type groqRequest struct {
+	Model    string        `json:"model"`
+	Messages []groqMessage `json:"messages"`
+}
+
+type groqChoice struct {
+	Message groqMessage `json:"message"`
+}
+
+type groqResponse struct {
+	Choices []groqChoice `json:"choices"`
+}
+
+func callGroq(ctx context.Context, apiKey, model, systemPrompt, userPrompt string) (string, error) {
+	reqBody, _ := json.Marshal(groqRequest{
+		Model: model,
+		Messages: []groqMessage{
+			{Role: "system", Content: systemPrompt},
+			{Role: "user", Content: userPrompt},
+		},
+	})
+
+	req, err := http.NewRequestWithContext(ctx, "POST", "https://api.groq.com/openai/v1/chat/completions", bytes.NewBuffer(reqBody))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("groq API error %d: %s", resp.StatusCode, string(body))
+	}
+
+	var groqResp groqResponse
+	if err := json.Unmarshal(body, &groqResp); err != nil {
+		return "", err
+	}
+	if len(groqResp.Choices) == 0 {
+		return "", fmt.Errorf("groq returned no choices")
+	}
+	return groqResp.Choices[0].Message.Content, nil
+}
+
+// ── MAKE PROMPT HANDLER (WITH PERSISTENT "PENDING" STATE + SMTP EMAIL TEMPLATING) ───
 func MakePromptHandler(
 	db *sql.DB,
 	logger *zap.Logger,
 	meter *prometheus.CounterVec,
-	genaiClient *genai.Client,
-	mailer *email.Client, // <-- pass your SMTP client here
-	baseURL string, // e.g. "http://localhost:8080"
+	groqAPIKey string,
+	mailer *email.Client,
+	baseURL string,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// 1) Extract user_id from context (RequireJWT middleware).
@@ -62,19 +116,7 @@ func MakePromptHandler(
 
 		logger.Info("Processing chat request", zap.Int("user_id", userID))
 
-		// 2) Enforce order window (08:00–17:00).
-		// now := time.Now()
-		// start := time.Date(now.Year(), now.Month(), now.Day(), 8, 0, 0, 0, now.Location())
-		// end := time.Date(now.Year(), now.Month(), now.Day(), 17, 0, 0, 0, now.Location())
-		// if now.Before(start) || now.After(end) {
-		// 	http.Error(w,
-		// 		"Orders are accepted only between 08:00 and 17:00",
-		// 		http.StatusForbidden,
-		// 	)
-		// 	return
-		// }
-
-		// 3) Decode student message.
+		// 2) Decode student message.
 		var req promptRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, "invalid JSON payload", http.StatusBadRequest)
@@ -88,8 +130,8 @@ func MakePromptHandler(
 		// ── STEP A: CHECK FOR ANY EXISTING PENDING ORDER FOR THIS USER ─────────────────────────
 		var pendingOrderID int
 		err := db.QueryRowContext(r.Context(),
-			`SELECT id 
-			   FROM orders 
+			`SELECT id
+			   FROM orders
 			  WHERE user_id = $1 AND status = 'PENDING'
 			  ORDER BY created_at DESC
 			  LIMIT 1`,
@@ -109,7 +151,6 @@ func MakePromptHandler(
 
 			if isConfirmation {
 				// ── USER CONFIRMS THE PENDING ORDER ────────────────────────────────────────────
-				// 1) Update that order to CONFIRMED
 				if _, err := db.ExecContext(r.Context(),
 					`UPDATE orders SET status='CONFIRMED' WHERE id = $1`, pendingOrderID,
 				); err != nil {
@@ -118,7 +159,7 @@ func MakePromptHandler(
 					return
 				}
 
-				// 2) Recompute transport fee and total_cost
+				// Recompute transport fee and total_cost
 				var totalSubtotal, confirmedCount int
 				rows, err := db.QueryContext(r.Context(),
 					`SELECT oi.quantity, oi.unit_price
@@ -139,50 +180,44 @@ func MakePromptHandler(
 
 				today := time.Now().Truncate(24 * time.Hour)
 				db.QueryRowContext(r.Context(),
-					`SELECT COUNT(*) 
+					`SELECT COUNT(*)
 					   FROM orders
-					  WHERE user_id = $1 
-					    AND status = 'CONFIRMED' 
+					  WHERE user_id = $1
+					    AND status = 'CONFIRMED'
 					    AND created_at >= $2`,
 					userID, today,
 				).Scan(&confirmedCount)
-				confirmedCount += 1 // include this one
+				confirmedCount += 1
 				transportFee := calculateTransportFee(confirmedCount)
 				totalCost := totalSubtotal + transportFee
 
-				// 3) Update transport_fee & total_cost in orders row
 				if _, err := db.ExecContext(r.Context(),
-					`UPDATE orders 
-						SET transport_fee = $1, total_cost = $2 
+					`UPDATE orders
+						SET transport_fee = $1, total_cost = $2
 					  WHERE id = $3`,
 					transportFee, totalCost, pendingOrderID,
 				); err != nil {
 					logger.Error("failed to update transport & total cost", zap.Error(err))
-					// proceed anyway
 				}
 
-				// 4) Send confirmation email using your templated `email` package
 				go func(orderID, uID, tf, tc int) {
-					// a) Lookup user email and username
 					var userEmail, username string
 					if err := db.QueryRowContext(context.Background(),
-						`SELECT email, /* assume you have a username column */ email 
-						   FROM users 
+						`SELECT email, email
+						   FROM users
 						  WHERE id = $1`, uID,
 					).Scan(&userEmail, &username); err != nil {
 						logger.Error("failed to lookup user email for confirmation", zap.Error(err))
 						return
 					}
 
-					// b) Fetch all items for this order
 					itemRows, _ := db.QueryContext(context.Background(),
-						`SELECT i.name, oi.quantity, oi.unit_price 
-						   FROM order_items oi 
-						   JOIN items i ON oi.item_id = i.id 
+						`SELECT i.name, oi.quantity, oi.unit_price
+						   FROM order_items oi
+						   JOIN items i ON oi.item_id = i.id
 						  WHERE oi.order_id = $1`, orderID,
 					)
 
-					// Build slice for template
 					var tmplItems []struct {
 						Name      string
 						Quantity  int
@@ -207,7 +242,6 @@ func MakePromptHandler(
 					}
 					itemRows.Close()
 
-					// Build OrderConfirmationData
 					data := email.OrderConfirmationData{
 						Username:      username,
 						OrderID:       orderID,
@@ -222,7 +256,6 @@ func MakePromptHandler(
 					}
 				}(pendingOrderID, userID, transportFee, totalCost)
 
-				// 5) Reply to user
 				w.Header().Set("Content-Type", "application/json")
 				json.NewEncoder(w).Encode(promptResponse{
 					Reply: "Your order has been confirmed! We'll see you at 18:00 at F2 17.",
@@ -240,12 +273,11 @@ func MakePromptHandler(
 					return
 				}
 
-				// Send cancellation email
 				go func(orderID, uID int) {
 					var userEmail, username string
 					if err := db.QueryRowContext(context.Background(),
-						`SELECT email, /* or username */ email 
-						   FROM users 
+						`SELECT email, email
+						   FROM users
 						  WHERE id = $1`, uID,
 					).Scan(&userEmail, &username); err != nil {
 						logger.Error("failed to lookup user email for cancellation", zap.Error(err))
@@ -268,8 +300,8 @@ func MakePromptHandler(
 				return
 			}
 
-			// If there's a PENDING but the user typed neither “confirm” nor “cancel”,
-			// we cancel the old PENDING silently and move on to a fresh request:
+			// If there's a PENDING but the user typed neither "confirm" nor "cancel",
+			// cancel the old PENDING silently and move on to a fresh request.
 			_, _ = db.ExecContext(r.Context(),
 				`UPDATE orders SET status='CANCELLED' WHERE id = $1`, pendingOrderID,
 			)
@@ -278,7 +310,7 @@ func MakePromptHandler(
 		// ── NO EXISTING PENDING ORDER (OR IT JUST GOT CLEARED) ────────────────────────────
 		// Proceed with fresh Phase 1 → Phase 2.
 
-		// === PHASE 1: Ask Gemini to extract product names & quantities ===
+		// === PHASE 1: Ask Groq to extract product names & quantities ===
 		phase1System := `
 You are an assistant that parses grocery-ordering requests. The user will type something like:
   "I want two Jesa Milk (2L) and three Nido Milk Powder (500g)."
@@ -286,7 +318,7 @@ Return a JSON array of objects, each with exactly two fields:
   "name": <exact product name string>,
   "quantity": <integer>.
 
-If the user mentions a product but does not specify a number, assume quantity=1. 
+If the user mentions a product but does not specify a number, assume quantity=1.
 Examples:
 - Input: "I want Jesa Milk (2L) and one Coca-Cola (330ml)"
   → Output: [{"name":"Jesa Milk (2L)","quantity":1},{"name":"Coca-Cola (330ml)","quantity":1}]
@@ -297,44 +329,24 @@ Examples:
 - Input: "I would like to buy toothpaste"
   → Output: [{"name":"toothpaste","quantity":1}]
 - If you cannot find any product names (e.g. "What is biology?"), return an empty JSON array: [].
+Return only the JSON array, no markdown fences or extra text.
 `
 		phase1User := fmt.Sprintf(`User: "%s"`, req.Message)
+
+		modelName := os.Getenv("GROQ_MODEL")
+		if modelName == "" {
+			modelName = "llama-3.3-70b-versatile"
+		}
 
 		ctx1, cancel1 := context.WithTimeout(r.Context(), 15*time.Second)
 		defer cancel1()
 
-		modelName := os.Getenv("GEMINI_MODEL")
-		if modelName == "" {
-			modelName = "gemini-2.0-flash"
+		phase1JSON, err := callGroq(ctx1, groqAPIKey, modelName, phase1System, phase1User)
+		if err != nil {
+			logger.Error("Groq Phase1 error", zap.Error(err))
+			http.Error(w, "internal error contacting Groq", http.StatusInternalServerError)
+			return
 		}
-		model := genaiClient.GenerativeModel(modelName)
-		model.SystemInstruction = &genai.Content{
-			Parts: []genai.Part{genai.Text(phase1System)},
-		}
-		iter1 := model.GenerateContentStream(ctx1, genai.Text(phase1User))
-
-		var phase1OutputBuilder strings.Builder
-		for {
-			resp, err := iter1.Next()
-			if err == iterator.Done {
-				break
-			}
-			if err != nil {
-				logger.Error("Gemini Phase1 error", zap.Error(err))
-				http.Error(w, "internal error contacting Gemini", http.StatusInternalServerError)
-				return
-			}
-			for _, cand := range resp.Candidates {
-				if cand.Content != nil {
-					for _, part := range cand.Content.Parts {
-						if txt, ok := part.(genai.Text); ok {
-							phase1OutputBuilder.WriteString(string(txt))
-						}
-					}
-				}
-			}
-		}
-		phase1JSON := phase1OutputBuilder.String()
 
 		// === LOG RAW PHASE 1 JSON ===
 		fmt.Printf("\n--- PHASE 1 RAW JSON ---\n%s\n--- END PHASE 1 ---\n\n", phase1JSON)
@@ -480,10 +492,10 @@ Examples:
 			))
 		}
 
-		breakdown := "Okay, here’s a summary of your order:\n\n"
+		breakdown := "Okay, here's a summary of your order:\n\n"
 		breakdown += "Items:\n" + strings.Join(lines, "\n") + "\n\n"
 		breakdown += fmt.Sprintf("Subtotal: %d UGX\n\n", totalSubtotal)
-		breakdown += "Once you confirm, we’ll add a transport fee and give you the grand total.\n\n"
+		breakdown += "Once you confirm, we'll add a transport fee and give you the grand total.\n\n"
 		breakdown += "Do you confirm the contents of this order?"
 
 		w.Header().Set("Content-Type", "application/json")

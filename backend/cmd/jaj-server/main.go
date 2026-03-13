@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"log"
 	"net/http"
 	"os"
@@ -10,11 +9,9 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
-	"github.com/google/generative-ai-go/genai"
 	"github.com/joho/godotenv"
 	"github.com/rs/cors"
 	"go.uber.org/zap"
-	"google.golang.org/api/option"
 
 	"server/internal/admin"
 	"server/internal/auth"
@@ -34,16 +31,10 @@ func main() {
 		log.Fatalf("config load: %v", err)
 	}
 
-	ctx := context.Background()
-	apiKey := os.Getenv("GEMINI_API_KEY")
-	if apiKey == "" {
-		log.Fatal("GEMINI_API_KEY must be set")
+	groqAPIKey := os.Getenv("GROQ_API_KEY")
+	if groqAPIKey == "" {
+		log.Fatal("GROQ_API_KEY must be set")
 	}
-	genaiClient, err := genai.NewClient(ctx, option.WithAPIKey(apiKey))
-	if err != nil {
-		log.Fatalf("GenAI init failed: %v", err)
-	}
-	defer genaiClient.Close()
 
 	logger := monitoring.NewLogger()
 	registry := monitoring.NewRegistry()
@@ -96,7 +87,7 @@ func main() {
 	mux.Handle(
 		"/chat/prompt",
 		auth.RequireSession(sqlDB)(
-			chat.MakePromptHandler(sqlDB, logger, registry, genaiClient, mailer, baseURL),
+			chat.MakePromptHandler(sqlDB, logger, registry, groqAPIKey, mailer, baseURL),
 		),
 	)
 
@@ -118,7 +109,7 @@ func main() {
 
 	// CORS (allows cookie credentials)
 	corsHandler := cors.New(cors.Options{
-		AllowedOrigins:   []string{"http://localhost:5173"},
+		AllowedOrigins:   []string{"http://localhost:5173", "https://jaj-delivery.web.app"},
 		AllowCredentials: true,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Content-Type", "Authorization", "Accept", "Origin", "X-Requested-With"},
